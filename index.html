@@ -1,0 +1,939 @@
+<!doctype html>
+<html lang="en" data-theme="cupcake">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prioritizing Grid</title>
+<script>
+  // Pick the saved colors before the page draws, so it doesn't flash one theme and then another.
+  (function () {
+    var s = { mode: 'light', light: 'cupcake', dark: 'dim' };
+    try {
+      var raw = localStorage.getItem('prioritizing-grid-theme');
+      if (raw === 'dark' || raw === 'light') s.mode = raw;
+      else if (raw) {
+        var o = JSON.parse(raw);
+        if (o && typeof o === 'object') for (var k in s) if (typeof o[k] === 'string') s[k] = o[k];
+      }
+    } catch (e) {}
+    window.__pgTheme = s;
+    document.documentElement.dataset.theme = s.mode === 'dark' ? s.dark : s.light;
+    document.documentElement.dataset.mode = s.mode === 'dark' ? 'dark' : 'light';
+  })();
+</script>
+<!-- daisyUI 5.7.50, MIT license, https://daisyui.com -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.7.50/daisyui.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.7.50/themes.css">
+<style>
+/* Page colors come from the daisyUI theme on <html data-theme>. */
+:root {
+  --pg-bg: var(--color-base-200);
+  --pg-card: var(--color-base-100);
+  --pg-soft: var(--color-base-200);
+  --pg-line: var(--color-base-300);
+  --pg-text: var(--color-base-content);
+  --pg-muted: color-mix(in oklab, var(--color-base-content) 62%, transparent);
+  --pg-pick: var(--color-primary);
+  --pg-on-pick: var(--color-primary-content);
+  --pg-pick-soft: color-mix(in oklab, var(--color-primary) 24%, var(--color-base-100));
+  --pg-tie: color-mix(in oklab, var(--color-warning) 22%, var(--color-base-100));
+  --pg-tie-line: color-mix(in oklab, var(--color-warning) 55%, var(--color-base-100));
+  --pg-ring: var(--color-base-content);
+}
+/* Yellow mixed into a dark background turns olive, so use less of it in dark mode. */
+:root[data-mode="dark"] {
+  --pg-tie: color-mix(in oklab, var(--color-warning) 15%, var(--color-base-100));
+  --pg-tie-line: color-mix(in oklab, var(--color-warning) 45%, var(--color-base-100));
+}
+* { box-sizing: border-box; }
+/* daisyUI gives .alert, .badge and others their own display, which would beat the hidden attribute. */
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+html { background: var(--pg-bg); }
+body {
+  background: var(--pg-bg);
+  color: var(--pg-text);
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.wrap { max-width: 1000px; margin: 0 auto; padding: 20px 16px 64px; }
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 20px; margin-bottom: 20px; }
+h1 { font-size: 26px; font-weight: 800; margin: 0; letter-spacing: -0.01em; }
+.sub { margin: 4px 0 0; color: var(--pg-muted); font-size: 15px; max-width: 520px; }
+.head-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.head-actions .select { width: auto; }
+.h2 { font-size: 17px; font-weight: 700; margin: 0 0 10px; }
+.muted { color: var(--pg-muted); }
+.small { font-size: 14px; }
+.panel { background: var(--pg-card); border-radius: var(--radius-box); padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+.panel + .panel, .panel + section, section + .panel { margin-top: 16px; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+.actions.center { justify-content: center; }
+:focus-visible { outline: 2px solid var(--pg-ring); outline-offset: 2px; }
+#storage-warn, #startover-confirm { margin-bottom: 16px; }
+
+/* List view */
+.two-col { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.field { display: block; margin-bottom: 14px; }
+.field > span { display: block; font-size: 14px; font-weight: 600; margin-bottom: 5px; }
+.field .input, .field .textarea { width: 100%; font-size: 15px; }
+.field .textarea { min-height: 260px; resize: vertical; line-height: 1.55; }
+.field-tight { margin-bottom: 8px; }
+.seg-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.hint-line { font-size: 13px; color: var(--pg-muted); margin: 6px 0 14px; }
+.msg { margin: 0 0 6px; font-size: 15px; }
+.msg.strong { font-weight: 600; }
+.boxes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; }
+.boxes li { display: flex; gap: 8px; align-items: baseline; background: var(--pg-soft); border-radius: var(--radius-field); padding: 6px 9px; font-size: 14px; min-width: 0; }
+.boxes li span.t { overflow-wrap: anywhere; }
+.bnum { font-variant-numeric: tabular-nums; font-weight: 800; color: var(--pg-muted); min-width: 1.6em; }
+
+/* Compare view */
+.ctop { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; font-size: 14px; }
+.cname { font-weight: 700; }
+#c-bar { width: 100%; margin: 8px 0 4px; }
+.question { font-size: 21px; font-weight: 800; text-align: center; margin: 18px 0 16px; }
+#pair .question { margin-bottom: 4px; }
+.q-hint { text-align: center; font-size: 14px; color: var(--pg-muted); margin: 0 0 16px; }
+.choices { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.choice { position: relative; min-height: 130px; border: 2px solid var(--pg-line); background: var(--pg-card); color: var(--pg-text); border-radius: var(--radius-box); padding: 18px 16px 30px; font: inherit; font-size: 18px; line-height: 1.35; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; overflow-wrap: anywhere; transition: border-color .12s, background .12s, transform .08s; }
+.choice:hover { border-color: var(--pg-pick); }
+.choice:active { transform: scale(.985); }
+.choice.picked { border-color: var(--pg-pick); background: var(--pg-pick-soft); }
+.choice .num { font-size: 13px; font-weight: 800; color: var(--pg-muted); }
+.choice .kbd { position: absolute; bottom: 8px; }
+@media (hover: none) { .choice .kbd, .hint { display: none; } }
+.cfoot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; }
+.cfoot #last { flex: 1 1 200px; font-size: 14px; }
+.hint { font-size: 13px; color: var(--pg-muted); margin: 12px 0 0; }
+.gridtitle { margin-top: 28px; margin-bottom: 2px; }
+.gridcap { margin: 0 0 10px; }
+.gridwrap { overflow-x: auto; border-radius: var(--radius-box); background: var(--pg-card); padding: 8px 0; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+#grid { display: inline-block; min-width: 100%; }
+.grow { display: flex; align-items: center; min-height: 36px; }
+.gitem { position: sticky; left: 0; z-index: 1; background: var(--pg-card); flex: 0 0 230px; width: 230px; display: flex; gap: 8px; align-items: center; padding: 2px 10px; font-size: 14px; white-space: nowrap; border-right: 1px solid var(--pg-line); align-self: stretch; }
+.gitem .gtext { overflow: hidden; text-overflow: ellipsis; }
+.gitem.cur { box-shadow: inset 3px 0 0 var(--pg-ring); font-weight: 600; }
+.gitem.hl { background: var(--pg-pick-soft); }
+.gcells { display: flex; gap: 3px; padding: 2px 8px; }
+.gcell { flex: 0 0 auto; min-width: 30px; height: 34px; border: 1px dashed var(--pg-line); border-radius: var(--radius-selector); background: var(--pg-soft); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0 2px; font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--pg-muted); cursor: pointer; }
+.gcell.done { border-style: solid; background: var(--pg-card); }
+.gcell:hover { border-color: var(--pg-pick); }
+.gcell span { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 13px; padding: 0 3px; border-radius: 7px; }
+.gcell span.pick { background: var(--pg-pick); color: var(--pg-on-pick); font-weight: 800; }
+.gcell.cur { outline: 2px solid var(--pg-ring); outline-offset: 1px; }
+
+/* Results view */
+.rtop p { margin: 0; font-size: 15px; }
+.toggle-row { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; font-size: 15px; font-weight: 600; margin-top: 14px; }
+.rhead, .rrow { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.rhead { font-size: 13px; color: var(--pg-muted); padding: 14px 14px 6px; border-bottom: 1px solid var(--pg-line); }
+.ranking, .ranking ol { list-style: none; margin: 0; padding: 0; }
+.rrow { padding: 10px 14px; border-bottom: 1px solid var(--pg-line); }
+.rrow .rank { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--pg-muted); }
+.rrow .rname { overflow-wrap: anywhere; }
+.rrow .rcount { font-variant-numeric: tabular-nums; font-weight: 700; text-align: right; }
+.tieblock { background: var(--pg-tie); border: 1px solid var(--pg-tie-line); border-radius: var(--radius-field); margin: 8px 0; overflow: hidden; }
+.tieblock .rrow { border-bottom-color: var(--pg-tie-line); }
+.tieblock .rrow:last-child { border-bottom: 0; }
+.tiehead { font-size: 13px; font-weight: 800; padding: 8px 14px 4px; }
+.tienote { font-size: 14px; color: var(--pg-muted); padding: 8px 14px 10px; margin: 0; border-top: 1px solid var(--pg-tie-line); }
+.rrow.cycle { align-items: start; }
+.cyc p { margin: 0 0 8px; font-size: 15px; }
+.recompare { padding: 4px 14px 12px; }
+.recompare p { margin: 0; }
+.recompare ul { list-style: none; margin: 10px 0 8px; padding: 0; display: grid; gap: 6px; }
+.rc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.rc-pair { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+details.how summary { cursor: pointer; font-weight: 700; }
+details.how p { margin: 10px 0 0; font-size: 15px; }
+
+@media (max-width: 720px) {
+  .two-col { grid-template-columns: 1fr; }
+  .gitem { flex-basis: 150px; width: 150px; }
+  .choice { min-height: 110px; font-size: 16px; }
+  .question { font-size: 18px; }
+}
+@media print {
+  header .head-actions, .actions, details.how, .toggle-row, #storage-warn { display: none !important; }
+  body { background: #fff; }
+  .panel { box-shadow: none; padding: 0; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Prioritizing grid</h1>
+      <p class="sub">Pick between two items at a time, and get your list back in order of how often you picked each one.</p>
+    </div>
+    <div class="head-actions">
+      <div role="tablist" class="tabs tabs-box" aria-label="Steps">
+        <button type="button" role="tab" class="tab" data-view="list">1. List</button>
+        <button type="button" role="tab" class="tab" data-view="compare">2. Compare</button>
+        <button type="button" role="tab" class="tab" data-view="results">3. Results</button>
+      </div>
+      <button type="button" class="btn btn-ghost" id="new-list">Start over</button>
+      <select class="select select-sm" id="theme-pick" aria-label="Colors"></select>
+      <button type="button" class="btn btn-ghost btn-sm" id="theme-toggle" aria-pressed="false">Dark mode</button>
+    </div>
+  </header>
+
+  <div id="storage-warn" class="alert alert-warning" hidden>This browser isn't saving your picks, so keep this tab open until you finish.</div>
+  <noscript><div class="alert alert-warning">This page needs JavaScript turned on.</div></noscript>
+  <div id="startover-confirm" class="alert" hidden>
+    <span id="startover-msg"></span>
+    <div class="actions" style="margin-top:0">
+      <button type="button" class="btn btn-sm btn-error" id="startover-yes">Clear it</button>
+      <button type="button" class="btn btn-sm" id="startover-no">Keep it</button>
+    </div>
+  </div>
+
+  <!-- 1. LIST -->
+  <section id="view-list" hidden>
+    <div class="two-col">
+      <div class="panel">
+        <label class="field"><span>Name of this list</span>
+          <input id="name" class="input" type="text" placeholder="e.g. Transferable skills" autocomplete="off"></label>
+        <label class="field"><span>Question to ask yourself at each pair</span>
+          <input id="question" class="input" type="text" placeholder="Which matters more to you?" autocomplete="off"></label>
+        <label class="field field-tight"><span>Your items</span>
+          <textarea id="items" class="textarea" placeholder="Paste your list here, one item per line or separated by commas" spellcheck="false"></textarea>
+        </label>
+        <div class="seg-row">
+          <span class="small muted">Split items at</span>
+          <div class="join seg" role="group" aria-label="Split items at">
+            <button type="button" class="btn btn-sm join-item" data-split="lines">New lines</button>
+            <button type="button" class="btn btn-sm join-item" data-split="commas">Commas</button>
+          </div>
+        </div>
+        <p class="hint-line">Numbers and bullets at the start of a line get taken out, and an item that appears twice is kept once.</p>
+        <p id="list-status" class="msg strong"></p>
+        <p id="list-dups" class="msg muted small" hidden></p>
+        <p id="list-kept" class="msg muted small" hidden></p>
+        <div class="actions">
+          <button type="button" class="btn btn-primary" id="start">Start comparing</button>
+          <button type="button" class="link small" id="sample">Fill in a sample list</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2 class="h2">Numbered items <span id="box-count" class="muted"></span></h2>
+        <ol id="boxes" class="boxes"></ol>
+        <p id="boxes-empty" class="muted small">Your items show up here with their numbers as you paste them.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. COMPARE -->
+  <section id="view-compare" hidden>
+    <div class="panel" id="compare-card">
+      <div class="ctop"><span id="c-name" class="cname"></span><span id="c-progress" class="muted"></span></div>
+      <progress id="c-bar" class="progress progress-primary" value="0" max="1"></progress>
+      <div id="pair">
+        <p id="q" class="question"></p>
+        <p class="q-hint">Think of it as choosing between two jobs, one with each of these.</p>
+        <div class="choices">
+          <button type="button" class="choice" id="choice-a"><span class="num"></span><span class="txt"></span><span class="tag badge badge-primary badge-sm" hidden>Your pick</span><kbd class="kbd kbd-sm">← or 1</kbd></button>
+          <button type="button" class="choice" id="choice-b"><span class="num"></span><span class="txt"></span><span class="tag badge badge-primary badge-sm" hidden>Your pick</span><kbd class="kbd kbd-sm">→ or 2</kbd></button>
+        </div>
+      </div>
+      <div id="done" hidden>
+        <p id="done-msg" class="question"></p>
+        <div class="actions center"><button type="button" class="btn btn-primary" id="done-btn"></button></div>
+      </div>
+      <div class="cfoot">
+        <button type="button" class="btn btn-ghost" id="back">Back</button>
+        <span id="last" class="muted"></span>
+        <button type="button" class="btn btn-primary" id="to-results">See results</button>
+      </div>
+      <p class="hint">Press ← or 1 for the left item, → or 2 for the right one, and Backspace to go back a pair.</p>
+    </div>
+    <h2 class="h2 gridtitle">The grid</h2>
+    <p class="muted small gridcap">Each box is one pair, and the filled number is the one you picked. Click any box to change that pick.</p>
+    <div class="gridwrap"><div id="grid"></div></div>
+  </section>
+
+  <!-- 3. RESULTS -->
+  <section id="view-results" hidden>
+    <div class="panel">
+      <div class="rtop">
+        <h2 class="h2" id="r-name"></h2>
+        <p id="r-summary" class="muted"></p>
+      </div>
+      <label class="toggle-row"><input type="checkbox" class="toggle toggle-primary" id="break"><span>Break ties using the picks you made between tied items</span></label>
+      <div class="rhead" aria-hidden="true"><span>Rank</span><span>Item</span><span id="r-max">Times picked</span></div>
+      <ol id="ranking" class="ranking"></ol>
+      <div class="actions">
+        <button type="button" class="btn btn-primary" id="copy">Copy the list</button>
+        <button type="button" class="btn" id="to-grid">Back to the grid</button>
+        <button type="button" class="btn btn-ghost" id="startover-results">Start over</button>
+      </div>
+    </div>
+    <details class="panel how">
+      <summary>How ties get broken</summary>
+      <p>Two items with the same count: the one you picked when you compared those two goes higher. This is the tie rule from <i>What Color Is Your Parachute?</i></p>
+      <p>Three or more items with the same count: the book says to put them in order by gut. This page starts from your own picks among those items, and the one you picked most often among them goes higher. Any that are still tied go through the same steps again.</p>
+      <p>Either way, "Compare these again" shows just the pairs among the tied items, with the picks you made. Leave them, or change any you see differently now. A change there only reorders the tied items, and the grid and the counts stay as they were.</p>
+      <p>If you picked in a circle (A over B, B over C, C over A), none of them wins head-to-head, so change one of those picks to put them in order.</p>
+      <p>Breaking a tie never moves an item above one you picked more often.</p>
+      <p>To change a pick everywhere, counts included, go back to the grid and click its box.</p>
+    </details>
+  </section>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var STORE_KEY = 'prioritizing-grid-v1';
+  var THEME_KEY = 'prioritizing-grid-theme';
+  var DEFAULT_Q = 'Which matters more to you?';
+  var LIGHT_THEMES = ['cupcake', 'bumblebee', 'lemonade', 'valentine', 'emerald', 'garden', 'pastel', 'retro', 'cyberpunk', 'acid', 'cmyk', 'winter', 'fantasy'];
+  var DARK_THEMES = ['dim', 'night', 'dracula', 'synthwave', 'sunset', 'abyss', 'coffee', 'dark'];
+  var store = { grids: {}, currentId: null };
+  var storageOK = true;
+  var view = 'list';
+  var cur = -1;          // index into pairOrder() for the pair on screen, -1 = none
+  var trail = [];        // pairs visited, for Back
+  var lastPick = null;   // { w, l } for the "last pick" line
+  var copyText = '';
+  var openTies = {};     // which ties have "Compare these again" open, for this visit only
+
+  function $(s) { return document.querySelector(s); }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+
+  // ---------- storage ----------
+  function load() {
+    try {
+      var raw = localStorage.getItem(STORE_KEY);
+      if (raw) {
+        var s = JSON.parse(raw);
+        if (s && s.grids && typeof s.grids === 'object') store = s;
+      }
+    } catch (e) { storageOK = false; }
+  }
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); storageOK = true; }
+    catch (e) { storageOK = false; }
+    $('#storage-warn').hidden = storageOK;
+  }
+  function makeGrid() {
+    var id = 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    var g = { id: id, name: '', question: '', text: '', split: 'auto', items: [], answers: {}, tiePicks: {}, tieOverrides: {}, breakTies: false, created: Date.now(), updated: Date.now() };
+    store.grids[id] = g;
+    store.currentId = id;
+    return g;
+  }
+  function cg() {
+    var g = store.grids[store.currentId];
+    if (!g) g = makeGrid();
+    return g;
+  }
+  function normalise(g) {
+    g.name = g.name || ''; g.question = g.question || ''; g.text = g.text || '';
+    g.answers = g.answers || {}; g.tiePicks = g.tiePicks || {}; g.tieOverrides = g.tieOverrides || {};
+    g.split = g.split || 'auto';
+    g.items = parseItems(g.text, splitMode(g)).items;
+  }
+
+  // ---------- list parsing ----------
+  var LEAD = /^\s*(?:[-*•·◦▪‣–—]+\s+|\(?\d{1,3}[.):\]]\s+|\[[ xX]?\]\s+)/;
+  // 'auto' reads a single line with commas as a comma list, and anything else as one item per line.
+  function splitMode(g) {
+    if (g.split === 'lines' || g.split === 'commas') return g.split;
+    var lines = String(g.text).split(/\r?\n/).filter(function (l) { return l.trim(); });
+    return (lines.length === 1 && /[,;]/.test(lines[0])) ? 'commas' : 'lines';
+  }
+  function parseItems(text, mode) {
+    var items = [], dups = [], seen = {};
+    var parts = mode === 'commas' ? String(text).split(/\r?\n|[,;]/) : String(text).split(/\r?\n/);
+    parts.forEach(function (raw) {
+      var line = raw.replace(LEAD, '').replace(LEAD, '').replace(/\s+/g, ' ').trim();
+      if (mode === 'commas') line = line.replace(/^(?:and|or)\s+/i, '');
+      if (!line) return;
+      var k = line.toLowerCase();
+      if (seen[k]) { dups.push(line); return; }
+      seen[k] = true;
+      items.push(line);
+    });
+    return { items: items, dups: dups };
+  }
+
+  // ---------- pairs ----------
+  // Order: 1v2, 2v3, 3v4 ... then 1v3, 2v4 ... so the same item doesn't come up many times in a row.
+  function pairOrder(n) {
+    var o = [];
+    for (var gap = 1; gap < n; gap++) for (var i = 0; i + gap < n; i++) o.push([i, i + gap]);
+    return o;
+  }
+  function pkey(a, b) { return a < b ? JSON.stringify([a, b]) : JSON.stringify([b, a]); }
+  function winner(g, a, b) {
+    var w = g.answers[pkey(a, b)];
+    return (w === a || w === b) ? w : null;
+  }
+  function stats(g) {
+    var order = pairOrder(g.items.length), done = 0;
+    order.forEach(function (p) { if (winner(g, g.items[p[0]], g.items[p[1]])) done++; });
+    return { order: order, total: order.length, done: done };
+  }
+  function nextUnanswered(g, order, from) {
+    var n = order.length;
+    for (var k = 1; k <= n; k++) {
+      var idx = ((from + k) % n + n) % n;
+      var p = order[idx];
+      if (!winner(g, g.items[p[0]], g.items[p[1]])) return idx;
+    }
+    return -1;
+  }
+
+  // ---------- ranking ----------
+  function countGroups(g) {
+    var items = g.items, wins = {};
+    items.forEach(function (x) { wins[x] = 0; });
+    for (var i = 0; i < items.length; i++) for (var j = i + 1; j < items.length; j++) {
+      var w = winner(g, items[i], items[j]);
+      if (w) wins[w]++;
+    }
+    var levels = unique(items.map(function (x) { return wins[x]; })).sort(function (a, b) { return b - a; });
+    return levels.map(function (c) { return { count: c, items: items.filter(function (x) { return wins[x] === c; }) }; });
+  }
+  function unique(arr) { return arr.filter(function (v, i) { return arr.indexOf(v) === i; }); }
+  function gkey(group) { return JSON.stringify(group.slice().sort()); }
+  function names(arr) {
+    var b = arr.map(function (x) { return '<b>' + esc(x) + '</b>'; });
+    if (b.length <= 2) return b.join(' and ');
+    return b.slice(0, -1).join(', ') + ' and ' + b[b.length - 1];
+  }
+  var WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+  function word(n) { return WORDS[n] || String(n); }
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  // The pick that orders two tied items: your second-look pick if you made one, otherwise your pick on the grid.
+  // Second-look picks only reorder tied items. They never change the grid or the counts.
+  function tieWinner(g, a, b) {
+    var o = g.tieOverrides && g.tieOverrides[pkey(a, b)];
+    return (o === a || o === b) ? o : winner(g, a, b);
+  }
+
+  // Breaks a tie inside `group`, using only the picks made between its members.
+  // Pushes {item} or {cycle:[...]} entries to `out`, and plain-language notes to `notes`.
+  function resolve(g, group, out, notes) {
+    if (group.length === 1) { out.push({ item: group[0] }); return; }
+    var iw = {};
+    group.forEach(function (x) { iw[x] = 0; });
+    for (var i = 0; i < group.length; i++) for (var j = i + 1; j < group.length; j++) {
+      var w = tieWinner(g, group[i], group[j]);
+      if (w) iw[w]++;
+    }
+    var levels = unique(group.map(function (x) { return iw[x]; })).sort(function (a, b) { return b - a; });
+    if (levels.length === 1) {
+      var k = gkey(group), top = g.tiePicks[k];
+      if (top && group.indexOf(top) !== -1) {
+        notes.push('You put ' + names([top]) + ' first out of ' + names(group) + '. <button type="button" class="link" data-unpick="' + esc(k) + '">Choose again</button>');
+        out.push({ item: top });
+        resolve(g, group.filter(function (x) { return x !== top; }), out, notes);
+      } else {
+        out.push({ cycle: group });
+      }
+      return;
+    }
+    var sorted = group.slice().sort(function (a, b) { return iw[b] - iw[a]; });
+    if (group.length === 2) {
+      var second = winner(g, sorted[0], sorted[1]) !== sorted[0];
+      notes.push(second
+        ? 'On a second look you picked ' + names([sorted[0]]) + ' over ' + names([sorted[1]]) + '.'
+        : 'You picked ' + names([sorted[0]]) + ' over ' + names([sorted[1]]) + ' when you compared them.');
+    } else {
+      var changed = false;
+      for (var a = 0; a < group.length; a++) for (var b = a + 1; b < group.length; b++) {
+        if (tieWinner(g, group[a], group[b]) !== winner(g, group[a], group[b])) changed = true;
+      }
+      notes.push('Among these ' + word(group.length) + ', you picked ' + sorted.map(function (x) {
+        return names([x]) + ' ' + plural(iw[x], 'time', 'times');
+      }).join(', ') + (changed ? ', counting your second look.' : '.'));
+    }
+    levels.forEach(function (lv) {
+      resolve(g, group.filter(function (x) { return iw[x] === lv; }), out, notes);
+    });
+  }
+  function cycleText(g, group) {
+    if (group.length === 3) {
+      var beats = function (a) { return group.filter(function (b) { return b !== a && tieWinner(g, a, b) === a; })[0]; };
+      var a = group[0], b = beats(a), c = b && beats(b);
+      if (b && c && c !== a) {
+        return 'You picked ' + names([a]) + ' over ' + names([b]) + ', ' + names([b]) + ' over ' + names([c]) + ', and ' + names([c]) + ' over ' + names([a]) + ', so none of the three wins head-to-head.';
+      }
+    }
+    return 'Among ' + names(group) + ', each one won the same number of picks against the others, so none of them wins head-to-head.';
+  }
+
+  // "Compare these again": every pair among the tied items, showing the pick that currently orders it.
+  function recomparePanel(g, items) {
+    var rows = '', anyChanged = false;
+    for (var i = 0; i < items.length; i++) for (var j = i + 1; j < items.length; j++) {
+      var a = items[i], b = items[j], w = tieWinner(g, a, b), first = winner(g, a, b);
+      if (w !== first) anyChanged = true;
+      var btn = function (x) {
+        return '<button type="button" class="btn btn-sm' + (x === w ? ' btn-primary' : '') + '" aria-pressed="' + (x === w) + '"' +
+          ' data-tie-a="' + esc(a) + '" data-tie-b="' + esc(b) + '" data-tie-w="' + esc(x) + '">' + esc(x) + '</button>';
+      };
+      rows += '<li class="rc-row"><span class="rc-pair">' + btn(a) + '<span class="muted small">or</span>' + btn(b) + '</span>' +
+        (w !== first ? '<span class="muted small">On the grid you picked ' + esc(first) + '.</span>' : '') + '</li>';
+    }
+    return '<div class="recompare"><p class="small"><b>' + esc(g.question.trim() || DEFAULT_Q) + '</b> Leave these as they are, or change any you see differently now. ' +
+      'A change here only reorders these tied items. The grid and the counts stay as they were.</p><ul>' + rows + '</ul>' +
+      (anyChanged ? '<button type="button" class="link small" data-tie-reset="' + esc(gkey(items)) + '">Go back to your picks from the grid</button>' : '') + '</div>';
+  }
+
+  // ---------- views ----------
+  function show(v) {
+    var g = cg(), s = stats(g);
+    if (v === 'compare' && g.items.length < 2) v = 'list';
+    if (v === 'results' && (s.total === 0 || s.done < s.total)) v = g.items.length >= 2 ? 'compare' : 'list';
+    var changed = v !== view;
+    view = v;
+    ['list', 'compare', 'results'].forEach(function (id) { $('#view-' + id).hidden = id !== v; });
+    if (v === 'list') renderList();
+    if (v === 'compare') {
+      if (cur < 0 || cur >= s.total) cur = nextUnanswered(g, s.order, -1);
+      renderCompare();
+    }
+    if (v === 'results') renderResults();
+    renderNav();
+    if (changed) window.scrollTo(0, 0);
+  }
+
+  function renderNav() {
+    var g = cg(), s = stats(g);
+    document.querySelectorAll('.tabs .tab').forEach(function (b) {
+      var v = b.dataset.view;
+      var off = (v === 'compare' && g.items.length < 2) || (v === 'results' && (s.total === 0 || s.done < s.total));
+      b.classList.toggle('tab-active', v === view);
+      b.setAttribute('aria-selected', String(v === view));
+      b.classList.toggle('tab-disabled', off);
+      b.disabled = off;
+      if (v === 'compare') b.textContent = g.items.length >= 2 ? '2. Compare (' + s.done + '/' + s.total + ')' : '2. Compare';
+    });
+  }
+
+  // ----- list -----
+  function renderList() {
+    var g = cg();
+    $('#name').value = g.name;
+    $('#question').value = g.question;
+    $('#items').value = g.text;
+    updateListStatus();
+  }
+  function updateListStatus() {
+    var g = cg(), mode = splitMode(g), parsed = parseItems(g.text, mode);
+    g.items = parsed.items;
+    document.querySelectorAll('.seg button').forEach(function (b) {
+      var on = b.dataset.split === mode;
+      b.setAttribute('aria-pressed', String(on));
+      b.classList.toggle('btn-primary', on);
+    });
+    var n = g.items.length, p = n * (n - 1) / 2, s = stats(g);
+    var msg;
+    if (n === 0) msg = 'Paste or type at least two items.';
+    else if (n === 1) msg = 'One item so far. Add at least one more.';
+    else msg = n + ' items, so ' + plural(p, 'pair', 'pairs') + ' to compare.';
+    if (p > 300) msg += ' That’s a lot for one sitting. Your picks save as you go, so you can stop and come back.';
+    $('#list-status').textContent = msg;
+
+    var d = $('#list-dups');
+    d.hidden = !parsed.dups.length;
+    if (parsed.dups.length) d.innerHTML = 'Took out ' + (parsed.dups.length === 1 ? 'a repeat' : parsed.dups.length + ' repeats') + ': ' + parsed.dups.map(esc).join(', ') + '.';
+
+    var kept = $('#list-kept');
+    kept.hidden = !(s.done > 0);
+    if (s.done > 0) kept.textContent = 'You’ve made ' + s.done + ' of ' + s.total + ' picks. A pick stays as long as both of its items stay in the list unchanged.';
+
+    // The sample only fills an empty box, so it can never replace a list you're working on.
+    $('#sample').hidden = !!g.text.trim();
+
+    var start = $('#start');
+    start.disabled = n < 2;
+    start.textContent = (n >= 2 && s.done === s.total) ? 'See results' : (s.done > 0 ? 'Keep comparing' : 'Start comparing');
+
+    $('#box-count').textContent = n ? '(' + n + ')' : '';
+    $('#boxes-empty').hidden = n > 0;
+    $('#boxes').innerHTML = g.items.map(function (x, i) {
+      return '<li><span class="bnum">' + (i + 1) + '</span><span class="t">' + esc(x) + '</span></li>';
+    }).join('');
+  }
+  // ----- compare -----
+  function renderCompare() {
+    var g = cg(), s = stats(g);
+    $('#c-name').textContent = g.name.trim() || 'Untitled list';
+    $('#c-progress').textContent = s.done + ' of ' + s.total + ' pairs picked';
+    var bar = $('#c-bar');
+    bar.max = s.total || 1;
+    bar.value = s.done;
+
+    var pair = $('#pair'), done = $('#done');
+    if (cur < 0) {
+      pair.hidden = true; done.hidden = false;
+      if (s.done === s.total) {
+        $('#done-msg').textContent = 'All ' + s.total + ' pairs picked.';
+        $('#done-btn').textContent = 'See results';
+      } else {
+        $('#done-msg').textContent = plural(s.total - s.done, 'pair', 'pairs') + ' left.';
+        $('#done-btn').textContent = 'Keep going';
+      }
+    } else {
+      pair.hidden = false; done.hidden = true;
+      var p = s.order[cur], a = g.items[p[0]], b = g.items[p[1]], w = winner(g, a, b);
+      $('#q').textContent = g.question.trim() || DEFAULT_Q;
+      fillChoice($('#choice-a'), p[0] + 1, a, w === a);
+      fillChoice($('#choice-b'), p[1] + 1, b, w === b);
+    }
+    $('#back').disabled = trail.length === 0;
+    $('#last').innerHTML = lastPick ? 'Last pick: <b>' + esc(lastPick.w) + '</b> over ' + esc(lastPick.l) + '.' : '';
+    $('#to-results').disabled = s.done < s.total;
+    renderGrid(g, s);
+    renderNav();
+  }
+  function fillChoice(btn, num, text, picked) {
+    btn.querySelector('.num').textContent = num;
+    btn.querySelector('.txt').textContent = text;
+    btn.querySelector('.tag').hidden = !picked;
+    btn.classList.toggle('picked', picked);
+    btn.setAttribute('aria-label', 'Pick item ' + num + ': ' + text);
+  }
+  function renderGrid(g, s) {
+    var items = g.items, n = items.length;
+    var cp = cur >= 0 ? s.order[cur] : null;
+    var html = '';
+    for (var j = 0; j < n; j++) {
+      var isCurItem = cp && (cp[0] === j || cp[1] === j);
+      html += '<div class="grow"><div class="gitem' + (isCurItem ? ' cur' : '') + '" data-idx="' + j + '" title="' + esc(items[j]) + '"><span class="bnum">' + (j + 1) + '</span><span class="gtext">' + esc(items[j]) + '</span></div><div class="gcells">';
+      for (var i = 0; i < j; i++) {
+        var w = winner(g, items[i], items[j]);
+        var isCur = cp && cp[0] === i && cp[1] === j;
+        var label = 'Items ' + (i + 1) + ' and ' + (j + 1) + (w ? ', you picked ' + (w === items[i] ? i + 1 : j + 1) : ', not picked yet');
+        html += '<button type="button" class="gcell' + (w ? ' done' : '') + (isCur ? ' cur' : '') + '" data-i="' + i + '" data-j="' + j + '" aria-label="' + label + '">' +
+          '<span' + (w === items[i] ? ' class="pick"' : '') + '>' + (i + 1) + '</span>' +
+          '<span' + (w === items[j] ? ' class="pick"' : '') + '>' + (j + 1) + '</span></button>';
+      }
+      html += '</div></div>';
+    }
+    $('#grid').innerHTML = html;
+  }
+  function pick(side) {
+    if (view !== 'compare' || cur < 0) return;
+    var g = cg(), s = stats(g), p = s.order[cur], a = g.items[p[0]], b = g.items[p[1]];
+    var wasComplete = s.done === s.total;
+    var w = side === 0 ? a : b;
+    g.answers[pkey(a, b)] = w;
+    // A new pick on the grid replaces any second look at the same pair.
+    if (g.tieOverrides) delete g.tieOverrides[pkey(a, b)];
+    g.updated = Date.now();
+    save();
+    lastPick = { w: w, l: w === a ? b : a };
+    trail.push(cur);
+    if (trail.length > 1000) trail.shift();
+    var s2 = stats(g);
+    if (s2.done === s2.total) {
+      cur = -1;
+      if (!wasComplete) { show('results'); return; }
+    } else {
+      cur = nextUnanswered(g, s2.order, cur);
+    }
+    renderCompare();
+  }
+  function back() {
+    if (!trail.length) return;
+    cur = trail.pop();
+    lastPick = null;
+    renderCompare();
+  }
+
+  // ----- results -----
+  function renderResults() {
+    var g = cg(), n = g.items.length, groups = countGroups(g);
+    $('#r-name').textContent = g.name.trim() || 'Untitled list';
+    $('#r-max').textContent = 'Times picked (out of ' + (n - 1) + ')';
+    $('#break').checked = !!g.breakTies;
+
+    var html = '', lines = [], rank = 1, open = 0;
+    function row(r, item, count) {
+      return '<li class="rrow"><span class="rank">' + r + '</span><span class="rname">' + esc(item) + '</span><span class="rcount">' + count + '</span></li>';
+    }
+    function line(r, item, count, tied) {
+      return r + '. ' + item + ' (picked ' + plural(count, 'time', 'times') + (tied ? ', tied' : '') + ')';
+    }
+    var ties = groups.filter(function (x) { return x.items.length > 1; });
+
+    groups.forEach(function (grp) {
+      if (grp.items.length === 1) {
+        html += row(rank, grp.items[0], grp.count);
+        lines.push(line(rank, grp.items[0], grp.count));
+        rank++;
+        return;
+      }
+      var head = 'Tied on ' + plural(grp.count, 'pick', 'picks');
+      if (!g.breakTies) {
+        var r0 = rank;
+        html += '<li class="tieblock"><div class="tiehead">' + head + '</div><ol>' +
+          grp.items.map(function (x) { return row(r0, x, grp.count); }).join('') + '</ol></li>';
+        grp.items.forEach(function (x) { lines.push(line(r0, x, grp.count, true)); });
+        rank += grp.items.length;
+        return;
+      }
+      var entries = [], notes = [];
+      resolve(g, grp.items, entries, notes);
+      var inner = '';
+      entries.forEach(function (e) {
+        if (e.item) {
+          inner += row(rank, e.item, grp.count);
+          lines.push(line(rank, e.item, grp.count));
+          rank++;
+        } else {
+          open++;
+          var r1 = rank;
+          inner += '<li class="rrow cycle"><span class="rank">' + rank + '-' + (rank + e.cycle.length - 1) + '</span><div class="cyc"><p>' +
+            cycleText(g, e.cycle) + ' Change one of the picks below to put them in order.</p></div><span class="rcount">' + grp.count + '</span></li>';
+          e.cycle.forEach(function (x) { lines.push(line(r1, x, grp.count, true)); });
+          rank += e.cycle.length;
+        }
+      });
+      // A circle can only be broken by changing a pick, so its pairs open without being asked.
+      var key = gkey(grp.items), isOpen = openTies[key] || entries.some(function (e) { return e.cycle; });
+      html += '<li class="tieblock"><div class="tiehead">' + head + '</div><ol>' + inner + '</ol>' +
+        '<p class="tienote">' + notes.join(' ') + (notes.length ? ' ' : '') +
+        '<button type="button" class="link" data-tie-toggle="' + esc(key) + '">' + (isOpen ? 'Hide the tied pairs' : 'Compare these again') + '</button></p>' +
+        (isOpen ? recomparePanel(g, grp.items) : '') + '</li>';
+    });
+    $('#ranking').innerHTML = html;
+
+    var sum = plural(n, 'item', 'items') + ', ' + plural(n * (n - 1) / 2, 'pair', 'pairs') + '. ';
+    var tieWord = ties.length === 1 ? 'One tie' : cap(word(ties.length)) + ' ties';
+    if (!ties.length) sum += 'No ties. Every item got a different number of picks.';
+    else if (!g.breakTies) sum += tieWord + ', shaded below. Turn on the switch to put tied items in order.';
+    else {
+      sum += tieWord + ', broken with the picks you made between the tied items.';
+      if (open) sum += open === 1
+        ? ' One of them goes in a circle, so change one of its picks to put those items in order.'
+        : ' ' + cap(word(open)) + ' of them go in a circle, so change a pick in each to put those items in order.';
+    }
+    $('#r-summary').textContent = sum;
+
+    copyText = (g.name.trim() ? g.name.trim() + '\n' : '') + lines.join('\n');
+  }
+
+  async function copyToClipboard(t) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(t); return true; }
+    } catch (e) { /* fall through */ }
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      var ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch (e) { return false; }
+  }
+
+  // ---------- colors: light / dark and the theme menu ----------
+  var theme = window.__pgTheme || { mode: 'light', light: 'cupcake', dark: 'dim' };
+  if (LIGHT_THEMES.indexOf(theme.light) === -1) theme.light = 'cupcake';
+  if (DARK_THEMES.indexOf(theme.dark) === -1) theme.dark = 'dim';
+  if (theme.mode !== 'dark') theme.mode = 'light';
+  function applyTheme() {
+    var dark = theme.mode === 'dark';
+    document.documentElement.dataset.theme = dark ? theme.dark : theme.light;
+    document.documentElement.dataset.mode = theme.mode;
+    var list = dark ? DARK_THEMES : LIGHT_THEMES, current = dark ? theme.dark : theme.light;
+    $('#theme-pick').innerHTML = list.map(function (t) {
+      return '<option value="' + t + '"' + (t === current ? ' selected' : '') + '>Colors: ' + t + '</option>';
+    }).join('');
+    var b = $('#theme-toggle');
+    b.textContent = dark ? 'Light mode' : 'Dark mode';
+    b.setAttribute('aria-pressed', String(dark));
+    try { localStorage.setItem(THEME_KEY, JSON.stringify(theme)); } catch (e) {}
+  }
+  $('#theme-toggle').addEventListener('click', function () {
+    theme.mode = theme.mode === 'dark' ? 'light' : 'dark';
+    applyTheme();
+  });
+  $('#theme-pick').addEventListener('change', function (e) {
+    if (theme.mode === 'dark') theme.dark = e.target.value; else theme.light = e.target.value;
+    applyTheme();
+  });
+  applyTheme();
+
+  // ---------- events ----------
+  document.querySelectorAll('.tabs .tab').forEach(function (b) {
+    b.addEventListener('click', function () { show(b.dataset.view); });
+  });
+  // One list at a time. Start over deletes it from the browser, after you say yes.
+  function askStartOver() {
+    var g = cg(), s = stats(g);
+    if (!g.text.trim()) { show('list'); $('#items').focus(); return; }
+    $('#startover-msg').textContent = s.done
+      ? 'Clear this list and its ' + plural(s.done, 'pick', 'picks') + '? Copy your ranking first if you still need it.'
+      : 'Clear this list?';
+    var box = $('#startover-confirm');
+    box.hidden = false;
+    box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  function startOver() {
+    delete store.grids[store.currentId];
+    makeGrid();
+    save();
+    cur = -1; trail = []; lastPick = null;
+    $('#startover-confirm').hidden = true;
+    view = '';
+    show('list');
+    $('#items').focus();
+  }
+  $('#new-list').addEventListener('click', askStartOver);
+  $('#startover-results').addEventListener('click', askStartOver);
+  $('#startover-yes').addEventListener('click', startOver);
+  $('#startover-no').addEventListener('click', function () { $('#startover-confirm').hidden = true; });
+  var justPasted = false;
+  $('#items').addEventListener('paste', function () { justPasted = true; });
+  $('#items').addEventListener('input', function (e) {
+    var g = cg(); g.text = e.target.value; g.updated = Date.now();
+    if (!g.text.trim()) g.split = 'auto';
+    // A pasted comma list stays a comma list when you add more lines to it later.
+    if (justPasted && g.split === 'auto' && splitMode(g) === 'commas') g.split = 'commas';
+    justPasted = false;
+    cur = -1; trail = []; lastPick = null;
+    updateListStatus(); save(); renderNav();
+  });
+  document.querySelectorAll('.seg button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var g = cg(); g.split = b.dataset.split; g.updated = Date.now();
+      cur = -1; trail = []; lastPick = null;
+      updateListStatus(); save(); renderNav();
+    });
+  });
+  $('#name').addEventListener('input', function (e) { var g = cg(); g.name = e.target.value; g.updated = Date.now(); save(); });
+  $('#question').addEventListener('input', function (e) { var g = cg(); g.question = e.target.value; g.updated = Date.now(); save(); });
+  $('#start').addEventListener('click', function () {
+    var g = cg(), s = stats(g);
+    show(s.done === s.total ? 'results' : 'compare');
+  });
+  $('#sample').addEventListener('click', function () {
+    var g = cg();
+    if (g.text.trim()) return;
+    g.name = 'Sample: fruit';
+    g.question = 'Which would you rather eat?';
+    g.split = 'auto';
+    g.text = ['Apples', 'Bananas', 'Mangoes', 'Pears', 'Grapes', 'Cherries', 'Oranges'].join('\n');
+    g.updated = Date.now();
+    cur = -1; trail = []; lastPick = null;
+    save(); renderList(); renderNav();
+  });
+  $('#choice-a').addEventListener('click', function () { pick(0); });
+  $('#choice-b').addEventListener('click', function () { pick(1); });
+  $('#back').addEventListener('click', back);
+  $('#to-results').addEventListener('click', function () { show('results'); });
+  $('#done-btn').addEventListener('click', function () {
+    var g = cg(), s = stats(g);
+    if (s.done === s.total) show('results');
+    else { cur = nextUnanswered(g, s.order, -1); renderCompare(); }
+  });
+
+  var grid = $('#grid'), hl = [];
+  function clearHL() { hl.forEach(function (el) { el.classList.remove('hl'); }); hl = []; }
+  grid.addEventListener('mouseover', function (e) {
+    var c = e.target.closest('.gcell');
+    clearHL();
+    if (!c) return;
+    [c.dataset.i, c.dataset.j].forEach(function (k) {
+      var el = grid.querySelector('.gitem[data-idx="' + k + '"]');
+      if (el) { el.classList.add('hl'); hl.push(el); }
+    });
+  });
+  grid.addEventListener('mouseleave', clearHL);
+  grid.addEventListener('click', function (e) {
+    var c = e.target.closest('.gcell');
+    if (!c) return;
+    var g = cg(), s = stats(g), i = +c.dataset.i, j = +c.dataset.j;
+    var idx = -1;
+    for (var k = 0; k < s.order.length; k++) if (s.order[k][0] === i && s.order[k][1] === j) { idx = k; break; }
+    if (idx < 0) return;
+    if (cur >= 0 && cur !== idx) trail.push(cur);
+    cur = idx; lastPick = null;
+    renderCompare();
+    var card = $('#compare-card');
+    if (card.getBoundingClientRect().top < 0) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (view !== 'compare') return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.target.matches && e.target.matches('input, textarea, select')) return;
+    if (e.key === 'ArrowLeft' || e.key === '1') { e.preventDefault(); pick(0); }
+    else if (e.key === 'ArrowRight' || e.key === '2') { e.preventDefault(); pick(1); }
+    else if (e.key === 'Backspace') { e.preventDefault(); back(); }
+  });
+
+  $('#break').addEventListener('change', function (e) {
+    var g = cg(); g.breakTies = e.target.checked; g.updated = Date.now(); save(); renderResults();
+  });
+  $('#ranking').addEventListener('click', function (e) {
+    var t = e.target.closest('button');
+    if (!t) return;
+    var g = cg();
+    if (t.dataset.tieToggle) { openTies[t.dataset.tieToggle] = !openTies[t.dataset.tieToggle]; renderResults(); return; }
+    // Keep the pairs open after a change, even when the change breaks a circle that had opened them.
+    var block = t.closest('.tieblock'), toggle = block && block.querySelector('[data-tie-toggle]');
+    if (toggle && (t.dataset.tieW || t.dataset.tieReset)) openTies[toggle.dataset.tieToggle] = true;
+    if (t.dataset.tieW) {
+      var a = t.dataset.tieA, b = t.dataset.tieB, w = t.dataset.tieW;
+      // A second look that matches the grid isn't stored, so the grid pick stays the default.
+      if (w === winner(g, a, b)) delete g.tieOverrides[pkey(a, b)]; else g.tieOverrides[pkey(a, b)] = w;
+    } else if (t.dataset.tieReset) {
+      var items = JSON.parse(t.dataset.tieReset);
+      for (var i = 0; i < items.length; i++) for (var j = i + 1; j < items.length; j++) delete g.tieOverrides[pkey(items[i], items[j])];
+    } else if (t.dataset.unpick) { delete g.tiePicks[t.dataset.unpick]; }
+    else return;
+    g.updated = Date.now(); save(); renderResults();
+  });
+  $('#copy').addEventListener('click', async function () {
+    var btn = $('#copy'), ok = await copyToClipboard(copyText);
+    btn.textContent = ok ? 'Copied' : 'Couldn’t copy';
+    setTimeout(function () { btn.textContent = 'Copy the list'; }, 1600);
+  });
+  $('#to-grid').addEventListener('click', function () { cur = -1; show('compare'); });
+
+  // ---------- start ----------
+  load();
+  // Keep only the list in use, and drop any others left over from when the page kept several.
+  // If the open one is empty, keep the most recent one that has items, so an in-progress list survives.
+  (function () {
+    var ids = Object.keys(store.grids);
+    if (ids.length < 2) return;
+    var open = store.grids[store.currentId];
+    var withText = ids.map(function (k) { return store.grids[k]; })
+      .filter(function (g) { return g.text && g.text.trim(); })
+      .sort(function (a, b) { return b.updated - a.updated; });
+    var keep = (open && open.text && open.text.trim()) ? open.id : (withText.length ? withText[0].id : store.currentId);
+    ids.forEach(function (k) { if (k !== keep) delete store.grids[k]; });
+    store.currentId = keep;
+    save();
+  })();
+  if (!store.grids[store.currentId]) {
+    var all = Object.keys(store.grids).map(function (k) { return store.grids[k]; }).sort(function (a, b) { return b.updated - a.updated; });
+    if (all.length) store.currentId = all[0].id; else makeGrid();
+  }
+  Object.keys(store.grids).forEach(function (k) { normalise(store.grids[k]); });
+  $('#storage-warn').hidden = storageOK;
+  var g0 = cg(), s0 = stats(g0);
+  view = '';
+  if (g0.items.length >= 2 && s0.done === s0.total) show('results');
+  else if (g0.items.length >= 2 && s0.done > 0) show('compare');
+  else show('list');
+})();
+</script>
+</body>
+</html>
